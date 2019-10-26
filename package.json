@@ -19,7 +19,7 @@
   ],
   "files": [
     "util.js",
-    "templates/fortunes.hbs"
+    "templates/users.hbs"
   ],
   "scripts": {
     "start": "es4x-launcher",
