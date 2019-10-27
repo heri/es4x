@@ -7,8 +7,6 @@ import {PgClient, Tuple} from '@reactiverse/reactive-pg-client';
 import {PgPoolOptions} from '@reactiverse/reactive-pg-client/options';
 import {RockerTemplateEngine} from '@vertx/web-templ-rocker'
 
-const util = require('./util');
-
 const SERVER = 'vertx.js';
 
 const app = Router.router(vertx);
