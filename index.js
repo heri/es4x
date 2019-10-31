@@ -15,8 +15,10 @@ let date = new Date().toUTCString();
 
 vertx.setPeriodic(1000, t => date = new Date().toUTCString());
 
+const INSERT_USER = "INSERT INTO users ($1,$2,$3)";
 const UPDATE_USER = "UPDATE users SET firstName=$1, lastName=$2 WHERE id=$3";
-const SELECT_USER = "SELECT id, firstName from users LIMIT 10";
+const SELECT_USERS = "SELECT id, firstName, lastName FROM users LIMIT 10";
+const GET_USER = "SELECT * FROM users WHERE id=$3 LIMIT 1";
 
 let client = PgClient.pool(
   vertx,
@@ -33,7 +35,7 @@ app.get("/users").handler(ctx => {
   let failed = false;
   let users = [];
 
-  client.preparedQuery(SELECT_USER, res => {
+  client.preparedQuery(SELECT_USERS, res => {
     if (res.succeeded()) {
       let resultSet = res.result().iterator();
 
@@ -44,7 +46,7 @@ app.get("/users").handler(ctx => {
 
       // we need a final reference
       const row = resultSet.next();
-      users.push({id: row.getString(0), firstName: row.getString(1), lastName: row.getString(1)});
+      users.push({id: row.getString(0), firstName: row.getString(1), lastName: row.getString(2)});
 
       ctx.response()
         .putHeader("Server", SERVER)
@@ -59,7 +61,7 @@ app.get("/users").handler(ctx => {
 
 // List of users, HTML response
 app.get("/").handler(ctx => {
-  client.preparedQuery(SELECT_USER, ar => {
+  client.preparedQuery(SELECT_USERS, ar => {
 
     if (ar.failed()) {
       ctx.fail(ar.cause());
@@ -69,6 +71,7 @@ app.get("/").handler(ctx => {
     let users = [];
     let resultSet = ar.result().iterator();
 
+    // no users
     if (!resultSet.hasNext()) {
       ctx.fail(404);
       return;
@@ -102,26 +105,51 @@ app.route("/webhook").handler(ctx => {
   const firstName = ctx.request().getParam("firstName");
   const lastName = ctx.request().getParam("lastName");
 
-
-  client.preparedQuery(UPDATE_USER, Tuple.of(firstName, lastName, id), ar => {
-    if (!failed) {
-      if (ar.failed()) {
-        failed = true;
-        ctx.fail(ar.cause());
-        return;
-      }
-
-      const row = ar.result().iterator().next();
-      users.push({id: row.getString(0), firstName: row.getString(1), lastName: row.getString(2)});
-
-      ctx.response()
-        .putHeader("Server", SERVER)
-        .putHeader("Date", date)
-        .putHeader("Content-Type", "application/json")
-        .end(JSON.stringify(users));
+  client.preparedQuery(GET_USER, Tuple.of(id), res => {
+    if (res.failed()) {
+      failed = true;
+      ctx.fail(res.cause());
+      return;
     }
+
+    let resultSet = res.result().iterator();
+
+    if (!resultSet.hasNext()) {
+      client.preparedQuery(INSERT_USER, Tuple.of(id, firstName, lastName), res => {
+        let resultSet = res.result().iterator();
+
+        if (resultSet.hasNext()) {
+          let row = resultSet.next();
+          let user = {id: row.getString(0), firstName: row.getString(1), lastName: row.getString(2)}
+          ctx.response()
+          .putHeader("Server", SERVER)
+          .putHeader("Date", date)
+          .putHeader("Content-Type", "application/json")
+          .end(JSON.stringify(user));
+        }
+      });
+    } else {
+      client.preparedQuery(UPDATE_USER, Tuple.of(firstName, lastName, id), ar => {
+        if (!failed) {
+          if (ar.failed()) {
+            failed = true;
+            ctx.fail(ar.cause());
+            return;
+          }
+    
+          const row = ar.result().iterator().next();
+          users.push({id: row.getString(0), firstName: row.getString(1), lastName: row.getString(2)});
+    
+          ctx.response()
+            .putHeader("Server", SERVER)
+            .putHeader("Date", date)
+            .putHeader("Content-Type", "application/json")
+            .end(JSON.stringify(users));
+        }
+      });
+
+    };
   });
-  
 });
 
 vertx
